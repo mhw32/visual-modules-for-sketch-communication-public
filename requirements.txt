@@ -1,0 +1,7 @@
+torch==0.3.1.post2
+numpy==1.14.3
+tqdm==4.23.4
+sklearn==0.19.1
+cPickle==1.71
+pandas==0.23.0
+PIL==5.1.0
