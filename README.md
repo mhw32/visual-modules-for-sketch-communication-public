@@ -1,3 +1,5 @@
+![header image of sketches](static/background.png)
+
 # Visual Module for Communication in Context
 
 Public code for [https://github.com/judithfan/visual_communication_in_context](https://github.com/judithfan/visual_communication_in_context).
@@ -10,7 +12,7 @@ Download dependencies:
 pip install -r ./requirements.txt
 ```
 
-Download data: 
+Download data:
 
 Go to https://figshare.com/projects/Visual_Communication_in_Context/38321. Download all zip files (should be 3) to `./visual_module/data` folder. Unzip all 3 files.
 
