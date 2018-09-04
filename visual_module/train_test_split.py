@@ -18,7 +18,7 @@ if __name__ == "__main__":
     random_seeds = np.random.randint(0, 1000, size=5)
     for i in xrange(5):
                              # this could be set to anything, doesn't matter
-        dset = VisualDataset(adaptor='high', split='train', average_labels=False,
+        dset = VisualDataset(adaptor='high', split='train',
                              photo_transform=None, sketch_transform=None,
                              train_test_split_dir=os.path.join(TRAIN_TEST_DIR, '%d' % (i + 1)),
                              random_seed=random_seeds[i])

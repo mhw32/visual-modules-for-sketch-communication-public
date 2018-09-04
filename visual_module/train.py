@@ -131,11 +131,11 @@ if __name__ == "__main__":
     if not os.path.isdir(args.out_dir):
         os.makedirs(args.out_dir)
 
-    train_dataset = VisualDataset(adaptor=args.adaptor, split='train', average_labels=True,
+    train_dataset = VisualDataset(adaptor=args.adaptor, split='train',
                                   train_test_split_dir=args.train_test_split_dir)
-    val_dataset = VisualDataset(adaptor=args.adaptor, split='val', average_labels=True,
+    val_dataset = VisualDataset(adaptor=args.adaptor, split='val',
                                 train_test_split_dir=args.train_test_split_dir)
-    test_dataset = VisualDataset(adaptor=args.adaptor, split='test', average_labels=True,
+    test_dataset = VisualDataset(adaptor=args.adaptor, split='test',
                                  train_test_split_dir=args.train_test_split_dir)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
