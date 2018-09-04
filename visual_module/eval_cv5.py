@@ -8,6 +8,7 @@ import os
 import subprocess
 from globals import TRAIN_TEST_DIR
 
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()

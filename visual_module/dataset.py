@@ -21,7 +21,6 @@ from torch.utils.data.dataset import Dataset
 
 from globals import TRAIN_TEST_DIR, DATA_DIR
 
-
 OBJECT_TO_CATEGORY = {
     'basset': 'dog', 'beetle': 'car', 'bloodhound': 'dog', 'bluejay': 'bird',
     'bluesedan': 'car', 'bluesport': 'car', 'brown': 'car', 'bullmastiff': 'dog',
@@ -39,35 +38,48 @@ CATEGORY_TO_OBJECT = {
     'chair': ['inlay', 'knob', 'leather', 'sling', 'squat', 'straight', 'waiting', 'woven'],
 }
 
-base_path = '/mnt/visual_communication_dataset/'
-if os.uname()[1] == 'node8-neuroaicluster':
-    base_path = '/data/jefan/'
-cur_folder_path = os.path.realpath(os.path.dirname(__file__))
-
 
 class VisualDataset(Dataset):
-    def __init__(self, adaptor='high', split='train', average_labels=True,
-                 overwrite_train_test_split=False, photo_transform=None,
-                 sketch_transform=None, train_test_split_dir=os.path.join(TRAIN_TEST_DIR, '1'),
+    r"""Dataset of VGG embeddings of photos and sketches. This dataset is used for training
+    as classes are carefully balanced by context and object class.
+
+    @param adaptor: string [default: high]
+                    which VGG layer to use (high -> FC6, mid -> CONV-4-2, early -> POOL-1)
+    @param split: string [default: train]
+                  train|val|test
+    @param photo_transform: ?torchvision.transforms [default: None]
+                            function to apply to raw photo embeddings
+    @param sketch_transform: ?torchvision.transforms [default: None]
+                             function to apply to raw sketch embeddings
+    @param train_test_split_dir: string [default: ./trained_models/1]
+                                 path to where train/test split files are stored
+    @param random_seed: integer [default: 42]
+                        random seed for reproducibility
+    """
+    def __init__(self, adaptor='high', split='train',
+                 photo_transform=None, sketch_transform=None,
+                 train_test_split_dir=os.path.join(TRAIN_TEST_DIR, '1'),
                  random_seed=42):
         super(VisualDataset, self).__init__()
         # for reproducibility
         np.random.seed(random_seed); random.seed(random_seed)
 
-        db_path = base_path + 'sketchpad_basic_fixedpose96_%s' % layer
-
+        db_path = os.path.join(DATA_DIR, 'sketchpad_basic_fixedpose96_%s' % adaptor)
         sketch_dirname = os.path.join(db_path, 'sketch')
         photo_dirname = os.path.join(db_path, 'photos')
         sketch_basepaths = os.listdir(sketch_dirname)
 
         # load all the different things that we will use to remove paths
-        valid_game_ids = pd.read_csv(os.path.join(db_path, 'valid_gameids_pilot2.csv'))
+        valid_game_ids = pd.read_csv(os.path.join(DATA_DIR, 'valid_gameids_pilot2.csv'))
         valid_game_ids = np.asarray(valid_game_ids['valid_gameids']).tolist()
-        with open(os.path.join(db_path, 'invalid_trial_paths_pilot2.txt')) as fp:
+
+        with open(os.path.join(DATA_DIR, 'invalid_trial_paths_pilot2.txt')) as fp:
             invalid_basepaths = [x.strip().replace('.png', '.npy') for x in fp.readlines()]
-        with open(os.path.join(db_path, 'incorrect_trial_paths_pilot2.txt')) as fp:
+
+        with open(os.path.join(DATA_DIR, 'incorrect_trial_paths_pilot2.txt')) as fp:
             incorrect_basepaths = [x.strip().replace('.png', '.npy') for x in fp.readlines()]
             incorrect_basepaths = ['_'.join(x.split('_')[:-1]) + '.npy' for x in incorrect_basepaths]
+
         # do the actual removal of the paths
         sketch_basepaths = [path for path in sketch_basepaths
                             if os.path.basename(path).split('_')[1] in valid_game_ids]
@@ -75,54 +87,38 @@ class VisualDataset(Dataset):
         sketch_basepaths = list(sketch_basepaths)
 
         # this details how labels are stored (order of objects)
-        object_order = pd.read_csv(base_path + 'human_confusion_object_order.csv')
+        object_order = pd.read_csv(os.path.join(DATA_DIR, 'human_confusion_object_order.csv'))
         object_order = np.asarray(object_order['object_name']).tolist()
 
         # load all 32 of them once since for every sketch we use the same 32 photos
         photo32_paths = [object_name + '.npy' for object_name in object_order]
 
         # load which sketches go to which classes
-        with open(os.path.join(db_path, 'sketchpad_label_dict.pickle')) as fp:
+        with open(os.path.join(DATA_DIR, 'sketchpad_label_dict.pickle')) as fp:
             self.label_dict = cPickle.load(fp)
 
-        with open(os.path.join(db_path, 'sketchpad_context_dict.pickle')) as fp:
+        with open(os.path.join(DATA_DIR, 'sketchpad_context_dict.pickle')) as fp:
             self.context_dict = cPickle.load(fp)
 
         # load human annotated labels.
-        annotation_path = 'sketchpad_basic_recog_group_data_2_augmented.csv'
-        annotations = pd.read_csv(os.path.join(base_path, annotation_path))
-        annotations = zip(annotations['fname'].values, annotations['choice'].values)
-
-        unrolled_dataset = defaultdict(lambda: [])
-        for annotation, choice in annotations:
-            annotation = annotation.replace('.png', '.npy')
-            choice = object_order.index(choice)
-            unrolled_dataset[annotation].append(choice)
-
-        average_annotations = np.load(os.path.join(cur_folder_path, 'annotations', 'human_confusion.npy'))
+        average_annotations = np.load(os.path.join(DATA_DIR, 'human_confusion.npy'))
 
         self.object_order = object_order
         preloaded_split = os.path.join(train_test_split_dir, '%s_split.json' % split)
-        if os.path.isfile(preloaded_split) or overwrite_train_test_split:
+        if os.path.isfile(preloaded_split):
             with open(preloaded_split) as fp:
                 sketch_paths = json.load(fp)
         else:
             sketch_paths = self.train_test_split(split, sketch_basepaths, train_test_split_dir)
 
-        if average_labels:
-            sketch_dataset = []
-            for path in sketch_paths:
-                object_ = self.label_dict[path]
-                object_ix = object_order.index(object_)
-                context = self.context_dict[path]
-                context_ix = 0 if context == 'closer' else 1
-                labels = average_annotations[object_ix, :, context_ix]
-                sketch_dataset.append((path, labels))
-        else:
-            sketch_dataset = []
-            for path in sketch_paths:
-                for label in unrolled_dataset[path]:
-                    sketch_dataset.append((path, label))
+        sketch_dataset = []
+        for path in sketch_paths:
+            object_ = self.label_dict[path]
+            object_ix = object_order.index(object_)
+            context = self.context_dict[path]
+            context_ix = 0 if context == 'closer' else 1
+            labels = average_annotations[object_ix, :, context_ix]
+            sketch_dataset.append((path, labels))
 
         self.sketch_dataset = sketch_dataset
         self.sketch_dirname = sketch_dirname
@@ -219,24 +215,41 @@ class VisualDataset(Dataset):
 
 
 class ExhaustiveDataset(VisualDataset):
-    """Used to create the RDM and JSON. Loops through every sketch & photo pair."""
-    def __init__(self, layer='fc6', split='test', photo_transform=None, sketch_transform=None,
-                 train_test_split_dir='./train_test_split/1', random_seed=42):
+    r"""This dataset is used for evaluation. Loops through every sketch & photo pair
+    and makes no effort to balance things.
+
+    @param adaptor: string [default: high]
+                    which VGG layer to use (high -> FC6, mid -> CONV-4-2, early -> POOL-1)
+    @param split: string [default: train]
+                  train|val|test
+    @param photo_transform: ?torchvision.transforms [default: None]
+                            function to apply to raw photo embeddings
+    @param sketch_transform: ?torchvision.transforms [default: None]
+                             function to apply to raw sketch embeddings
+    @param train_test_split_dir: string [default: ./trained_models/1]
+                                 path to where train/test split files are stored
+    @param random_seed: integer [default: 42]
+                        random seed for reproducibility
+    """
+    def __init__(self, adaptor='high', split='test', photo_transform=None, sketch_transform=None,
+                 train_test_split_dir=os.path.join(DATA_DIR, '1'), random_seed=42):
         super(ExhaustiveDataset, self).__init__()
         np.random.seed(random_seed); random.seed(random_seed)
-        db_path = base_path + 'sketchpad_basic_fixedpose96_%s' % layer
+
+        db_path = os.path.join(DATA_DIR, 'sketchpad_basic_fixedpose96_%s' % adaptor)
         photo_dirname = os.path.join(db_path, 'photos')
         sketch_dirname = os.path.join(db_path, 'sketch')
         sketch_basepaths = os.listdir(sketch_dirname)
 
         # load all the different things that we will use to remove paths
-        valid_game_ids = pd.read_csv(os.path.join(db_path, 'valid_gameids_pilot2.csv'))
+        valid_game_ids = pd.read_csv(os.path.join(DATA_DIR, 'valid_gameids_pilot2.csv'))
         valid_game_ids = np.asarray(valid_game_ids['valid_gameids']).tolist()
-        with open(os.path.join(db_path, 'invalid_trial_paths_pilot2.txt')) as fp:
+        with open(os.path.join(DATA_DIR, 'invalid_trial_paths_pilot2.txt')) as fp:
             invalid_basepaths = [x.strip().replace('.png', '.npy') for x in fp.readlines()]
-        with open(os.path.join(db_path, 'incorrect_trial_paths_pilot2.txt')) as fp:
+        with open(os.path.join(DATA_DIR, 'incorrect_trial_paths_pilot2.txt')) as fp:
             incorrect_basepaths = [x.strip().replace('.png', '.npy') for x in fp.readlines()]
             incorrect_basepaths = ['_'.join(x.split('_')[:-1]) + '.npy' for x in incorrect_basepaths]
+
         # do the actual removal of the paths
         sketch_basepaths = [path for path in sketch_basepaths
                             if os.path.basename(path).split('_')[1] in valid_game_ids]
@@ -244,16 +257,16 @@ class ExhaustiveDataset(VisualDataset):
         sketch_basepaths = list(sketch_basepaths)
 
         # this details how labels are stored (order of objects)
-        object_order = pd.read_csv(base_path+'human_confusion_object_order.csv')
+        object_order = pd.read_csv(os.path.join(DATA_DIR, 'human_confusion_object_order.csv'))
         object_order = np.asarray(object_order['object_name']).tolist()
 
         # load all 32 of them once since for every sketch we use the same 32 photos
         photo_32_paths = [object_name + '.npy' for object_name in object_order]
 
-        with open(os.path.join(db_path, 'sketchpad_context_dict.pickle')) as fp:
+        with open(os.path.join(DATA_DIR, 'sketchpad_context_dict.pickle')) as fp:
             self.context_dict = cPickle.load(fp)
 
-        with open(os.path.join(db_path, 'sketchpad_label_dict.pickle')) as fp:
+        with open(os.path.join(DATA_DIR, 'sketchpad_label_dict.pickle')) as fp:
             self.label_dict = cPickle.load(fp)
 
         if split != 'full':
