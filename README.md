@@ -10,11 +10,9 @@ Download dependencies:
 pip install -r ./requirements.txt
 ```
 
-Download data:
-    
-    - Go to https://figshare.com/projects/Visual_Communication_in_Context/38321
-    - Download all zip files (should be 3) to `./visual_module/data` folder
-    - Unzip all 3 files
+Download data: 
+
+Go to https://figshare.com/projects/Visual_Communication_in_Context/38321. Download all zip files (should be 3) to `./visual_module/data` folder. Unzip all 3 files.
 
 #### Running files
 
